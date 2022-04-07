@@ -20,14 +20,23 @@ class TestGravLearn(unittest.TestCase):
         device = "cpu"
         model = gravlearn.GravLearnModel(self.A.shape[0], 32)
         dist_metric = gravlearn.DistanceMetrics.COSINE
-        model = gravlearn.train(model, self.seqs, window_length=5, dist_metric=dist_metric, device = device)
+        model = gravlearn.train(
+            model, self.seqs, window_length=5, dist_metric=dist_metric, device=device
+        )
         emb = model.forward(torch.from_numpy(np.arange(self.A.shape[0])).to(device))
 
     def test_grav_learn_set(self):
         device = "cpu"
         model = gravlearn.GravLearnSetModel(self.A.shape[0], 32)
         dist_metric = gravlearn.DistanceMetrics.COSINE
-        model = gravlearn.train(model, self.seqs, window_length=5, dist_metric=dist_metric, device = device, bags = self.A)
+        model = gravlearn.train(
+            model,
+            self.seqs,
+            window_length=5,
+            dist_metric=dist_metric,
+            device=device,
+            bags=self.A,
+        )
         emb = model.forward(self.A)
 
 
