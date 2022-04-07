@@ -4,8 +4,6 @@ from collections.abc import Iterable
 import numpy as np
 from numba import njit
 
-from . import utils
-
 
 class RandomWalkSampler:
     """Module for generating a sentence using random walks.
@@ -43,7 +41,7 @@ class RandomWalkSampler:
         self.indices = adjmat.indices.astype(np.int64)
         if self.weighted:
             data = adjmat.data / adjmat.sum(axis=1).A1.repeat(np.diff(self.indptr))
-            self.data = utils._csr_row_cumsum(self.indptr, data)
+            self.data = _csr_row_cumsum(self.indptr, data)
 
     def sampling(self, start):
         """Sample a random walk path.
@@ -165,3 +163,15 @@ def _random_walk_weighted(indptr, indices, data, walk_length, p, q, ts):
                     break
             walk[walk_id, j] = new_node
     return walk
+
+
+@njit(nogil=True)
+def _csr_row_cumsum(indptr, data):
+    out = np.empty_like(data)
+    for i in range(len(indptr) - 1):
+        acc = 0
+        for j in range(indptr[i], indptr[i + 1]):
+            acc += data[j]
+            out[j] = acc
+        out[j] = 1.0
+    return out

@@ -19,7 +19,7 @@ with open(path.join(this_directory, "README.md")) as f:
     long_description = f.read()
 
 setup(
-    name="ref2vec",
+    name="gravlearn",
     version=__version__,
     author="Sadamori Kojaku",
     url="https://github.com/skojaku/gravlearn",

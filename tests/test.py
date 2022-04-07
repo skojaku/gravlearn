@@ -1,64 +1,34 @@
 import unittest
-
 import networkx as nx
 import numpy as np
+import gravlearn
+import torch
 
-import residual2vec as rv
 
-
-class TestResidual2Vec(unittest.TestCase):
+class TestGravLearn(unittest.TestCase):
     def setUp(self):
-        self.G = nx.karate_club_graph()
-        self.A = nx.adjacency_matrix(self.G)
+        G = nx.karate_club_graph()
+        self.A = nx.adjacency_matrix(G)
+        self.labels = [G.nodes[i]["club"] for i in G.nodes]
 
-    def test_mf_fit_and_transform(self):
-        model = rv.residual2vec_matrix_factorization()
-        model.fit(self.A)
-        vec = model.transform(dim=32)
+        sampler = gravlearn.RandomWalkSampler(self.A, walk_length=40, p=1, q=1)
+        self.seqs = [
+            sampler.sampling(i) for _ in range(10) for i in range(self.A.shape[0])
+        ]
 
-        assert vec.shape[1] == 32
-        assert vec.shape[0] == self.A.shape[0]
+    def test_grav_learn(self):
+        device = "cpu"
+        model = gravlearn.GravLearnModel(self.A.shape[0], 32)
+        dist_metric = gravlearn.DistanceMetrics.COSINE
+        model = gravlearn.train(model, self.seqs, window_length=5, dist_metric=dist_metric, device = device)
+        emb = model.forward(torch.from_numpy(np.arange(self.A.shape[0])).to(device))
 
-    def test_mf_fit_transform(self):
-        model = rv.residual2vec_matrix_factorization()
-        vec = model.fit(self.A).transform(dim=32)
-
-        assert vec.shape[1] == 32
-        assert vec.shape[0] == self.A.shape[0]
-
-    def test_mf_random_graphs(self):
-        group_membership = np.random.choice(3, self.A.shape[0], replace=True)
-        model = rv.residual2vec_matrix_factorization(group_membership=group_membership)
-        vec = model.fit(self.A).transform(dim=32)
-
-        assert vec.shape[1] == 32
-        assert vec.shape[0] == self.A.shape[0]
-
-    def test_sgd_fit_and_transform(self):
-        noise_sampler = rv.ConfigModelNodeSampler()
-        model = rv.residual2vec_sgd(noise_sampler)
-        model.fit(self.A)
-        vec = model.transform(dim=32)
-
-        assert vec.shape[1] == 32
-        assert vec.shape[0] == self.A.shape[0]
-
-    def test_sgd_fit_transform(self):
-        noise_sampler = rv.ConfigModelNodeSampler()
-        model = rv.residual2vec_sgd(noise_sampler)
-        vec = model.fit(self.A).transform(dim=32)
-
-        assert vec.shape[1] == 32
-        assert vec.shape[0] == self.A.shape[0]
-
-    def test_sgd_random_graphs(self):
-        group_membership = np.random.choice(3, self.A.shape[0], replace=True)
-        noise_sampler = rv.SBMNodeSampler(group_membership=group_membership)
-        model = rv.residual2vec_sgd(noise_sampler)
-        vec = model.fit(self.A).transform(dim=32)
-
-        assert vec.shape[1] == 32
-        assert vec.shape[0] == self.A.shape[0]
+    def test_grav_learn_set(self):
+        device = "cpu"
+        model = gravlearn.GravLearnSetModel(self.A.shape[0], 32)
+        dist_metric = gravlearn.DistanceMetrics.COSINE
+        model = gravlearn.train(model, self.seqs, window_length=5, dist_metric=dist_metric, device = device, bags = self.A)
+        emb = model.forward(self.A)
 
 
 if __name__ == "__main__":

@@ -1,82 +1,47 @@
-"""Test by visual inspection of the generated embeddings."""
 # %%
 %load_ext autoreload
 %autoreload 2
-%matplotlib ipympl
 import numpy as np
 import pandas as pd
-from ref2vec import dim_reducer
 from scipy import sparse
-import sys
 import seaborn as sns
 import matplotlib.pyplot as plt
-from tqdm import tqdm
-
 import networkx as nx
-import ref2vec as gn
 import torch
-import residual2vec
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.decomposition import PCA
+import gravlearn
 # %%
+device = "cuda:0"
+
 G = nx.karate_club_graph()
 A = nx.adjacency_matrix(G)
 
 labels = [G.nodes[i]["club"] for i in G.nodes]
-sampler = gn.RandomWalkSampler(A, walk_length=40, p=1, q=1)
+sampler = gravlearn.RandomWalkSampler(A, walk_length=40, p=1, q=1)
 walks = [sampler.sampling(i) for _ in range(10) for i in range(A.shape[0])]
+model = gravlearn.GravLearnSetModel(A.shape[0], 32, normalize=False)
+dist_metric = gravlearn.DistanceMetrics.COSINE
+gravlearn.train(model, walks, device = device, bags =A ,window_length=5, dist_metric=dist_metric)
 
-model = gn.train_ref2vec(
-    seqs=walks,
-    refs_for_seq=A,
-    conv_matrix=A,
-    conv_decay_rate=1.0,
-    window_length=5,
-    epochs = 1,
-    dim=64,
-    batch_size = 256,
-    learn_joint_prob=True,
-    checkpoint=100,
-    outputfile="test.pth",
-    weights=None,  # 1/np.array(A.sum(axis = 1)).reshape(-1),
-    cuda=True,
-    normalize=True,
-)
-
-# %%
-model.eval()
 emb = model.forward(A)
-
-# %%
-model
-
-# %% 3d plot
-from mpl_toolkits.mplot3d import Axes3D
-import matplotlib.pyplot as plt
-reducer = dim_reducer.SphericalPCA()
-xyz = reducer.fit_transform(emb, dim=3)
-
-# creating figure
-fig = plt.figure()
-ax = Axes3D(fig, auto_add_to_figure=False)
-fig.add_axes(ax)
-
-# creating the plot
-cmap = sns.color_palette().as_hex()
-plot_geeks = ax.scatter(
-    xyz[:, 0],
-    xyz[:, 1],
-    xyz[:, 2],
-    color=[cmap[i] for i in np.unique(labels, return_inverse=True)[1]],
-)
-plt.show()
-# %%
-model.radius.weight
-# %%
-
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+#emb = model.forward(torch.from_numpy(np.arange(34)).to(device))
 
 clf = LinearDiscriminantAnalysis(n_components=1)
 clf = clf.fit(emb, labels)
+xy = PCA(n_components=2).fit_transform(emb)
+
+sns.scatterplot(
+    x=xy[:, 0],
+    y=xy[:, 1],
+    hue=labels,
+    size=np.array(A.sum(axis=1)).reshape(-1) / 10,
+    sizes=(1, 50),
+)
+sns.despine()
 clf.score(emb, labels)
+
+
 
 
 # reducer.model.encoder.weight.data.numpy().shape
