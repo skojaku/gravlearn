@@ -2,7 +2,7 @@
 
 ```python
 import networkx as nx
-import gravlearn
+import gravlearn as gn
 import torch
 
 # Load data
@@ -11,18 +11,15 @@ A = nx.adjacency_matrix(G)
 labels = [G.nodes[i]["club"] for i in G.nodes]
 
 # Generate the sequence for demo
-sampler = gravlearn.RandomWalkSampler(A, walk_length=40, p=1, q=1)
+sampler = gn.RandomWalkSampler(A, walk_length=40, p=1, q=1)
 walks = [sampler.sampling(i) for _ in range(10) for i in range(A.shape[0])]
 
 # Training
-model = gravlearn.GravLearnSetModel(A.shape[0], 32) # Embedding based on set
-#model = gravlearn.GravLearnModel(A.shape[0], 32) # Embedding based on one-hot vector
+model = gravlearn.Word2Vec(A.shape[0], 32) # Embedding based on set
 
-dist_metric = gravlearn.DistanceMetrics.COSINE
+dist_metric = gravlearn.DistanceMetrics.EUCLIDEAN
 model = gravlearn.train(model, walks, device = device, bags =A ,window_length=5, dist_metric=dist_metric)
-#model = gravlearn.train(model, walks, device = device, window_length=5, dist_metric=dist_metric)
 
 # Embedding
-emb = model.forward(A)
-# emb = model.forward(torch.arange(A.shape[0]))
+emb = model.forward(torch.arange(A.shape[0]))
 ```
