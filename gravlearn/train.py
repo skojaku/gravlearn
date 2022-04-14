@@ -29,8 +29,8 @@ def train(
     # flag up "model.normalize" if the dist metric is scale invariant
     if DistanceMetrics.is_scale_invariant(dist_metric):
         model.normalize = True
-    else:  # if it is scale variant, then mute the concentration parameter
-        model.concentration.requires_grad = False
+    else:  # if it is scale variant, then mute the scale parameter
+        model.scale.requires_grad = False
 
     #
     # Set up data sampler

@@ -12,6 +12,7 @@ class DistanceMetrics(Enum):
     EUCLIDEAN = lambda x, y: F.pairwise_distance(x, y, p=2)
     COSINE = lambda x, y: 1 - F.cosine_similarity(x, y)
     ANGULAR = lambda x, y: torch.arccos((1 - 1e-2) * F.cosine_similarity(x, y))
+    DOTSIM = lambda x, y: -(x * y).sum(dim=1)
 
     def is_scale_invariant(dist_metric):
         return torch.isclose(

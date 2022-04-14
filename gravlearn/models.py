@@ -8,6 +8,28 @@ from .fastRP import fastRP
 from . import utils
 
 
+class Word2Vec(nn.Module):
+    def __init__(self, vocab_size, dim, normalize=False):
+        super(Word2Vec, self).__init__()
+        # Layers
+        self.ivectors = torch.nn.Embedding(vocab_size, dim, dtype=torch.float)
+        self.scale = nn.Parameter(torch.Tensor([1]), requires_grad=False)
+
+        # Parameters
+        self.normalize = normalize
+        self.training = True
+
+    def forward(self, data):
+        x = self.ivectors(data)
+        if self.training is False:
+            if self.ivectors.weight.is_cuda:
+                return x.detach().cpu().numpy()
+            else:
+                return x.detach().numpy()
+        else:
+            return x
+
+
 class GravLearnModel(nn.Module):
     def __init__(self, vocab_size, dim, normalize=False):
         super(GravLearnModel, self).__init__()
@@ -16,7 +38,7 @@ class GravLearnModel(nn.Module):
         self.reducer = torch.nn.Embedding(vocab_size, dim, dtype=torch.float)
         self.relu = nn.LeakyReLU()
         self.dropout = nn.Dropout(p=0.2)
-        self.concentration = nn.Parameter(torch.Tensor([1]), requires_grad=True)
+        self.scale = nn.Parameter(torch.Tensor([1]), requires_grad=True)
         self.output_layer = torch.nn.Linear(dim, dim, dtype=torch.float, bias=True)
 
         # Parameters
@@ -64,7 +86,7 @@ class GravLearnSetModel(nn.Module):
         self.middle_layer = nn.Linear(conv_layer_size, dim)
         self.relu = nn.LeakyReLU()
         self.dropout = nn.Dropout(p=0.2)
-        self.concentration = nn.Parameter(torch.Tensor([1]), requires_grad=True)
+        self.scale = nn.Parameter(torch.Tensor([1]), requires_grad=True)
         self.output_layer = torch.nn.Linear(dim, dim, dtype=torch.float, bias=True)
 
         # Parameters

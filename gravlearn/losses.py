@@ -18,9 +18,9 @@ class QuadletLoss(nn.Module):
         onvectors = self.embedding.forward(onword)
 
         oloss = self.logsigmoid(
-            -self.embedding.concentration * self.dist_func(ivectors, ovectors)
+            -self.embedding.scale * self.dist_func(ivectors, ovectors)
         )
         nloss = self.logsigmoid(
-            -self.embedding.concentration * self.dist_func(invectors, onvectors).neg()
+            -self.embedding.scale * self.dist_func(invectors, onvectors).neg()
         )
         return -(oloss + nloss).mean()

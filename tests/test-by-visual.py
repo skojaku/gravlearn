@@ -22,10 +22,9 @@ sampler = gravlearn.RandomWalkSampler(A, walk_length=40, p=1, q=1)
 walks = [sampler.sampling(i) for _ in range(10) for i in range(A.shape[0])]
 model = gravlearn.GravLearnSetModel(A.shape[0], 32, normalize=False)
 dist_metric = gravlearn.DistanceMetrics.COSINE
-gravlearn.train(model, walks, device = device, bags =A ,window_length=5, dist_metric=dist_metric)
+gravlearn.train(model, walks, device = device, bags =A ,window_length=5, dist_metric=dist_metric, batch_size=1024)
 
 emb = model.forward(A)
-#emb = model.forward(torch.from_numpy(np.arange(34)).to(device))
 
 clf = LinearDiscriminantAnalysis(n_components=1)
 clf = clf.fit(emb, labels)
