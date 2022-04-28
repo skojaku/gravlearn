@@ -20,7 +20,8 @@ A = nx.adjacency_matrix(G)
 labels = [G.nodes[i]["club"] for i in G.nodes]
 sampler = gravlearn.RandomWalkSampler(A, walk_length=40, p=1, q=1)
 walks = [sampler.sampling(i) for _ in range(10) for i in range(A.shape[0])]
-model = gravlearn.GravLearnSetModel(A.shape[0], 32, normalize=False)
+base_emb = gravlearn.fastRP(A, 256, 10, 1)
+model = gravlearn.GravLearnModel(A.shape[0], dim=32, base_emb = base_emb, normalize=False)
 dist_metric = gravlearn.DistanceMetrics.COSINE
 gravlearn.train(model, walks, device = device, bags =A ,window_length=5, dist_metric=dist_metric, batch_size=1024)
 
@@ -71,33 +72,18 @@ net = net[s, :][:, s]
 
 
 # %%
-sampler = gn.RandomWalkSampler(net, walk_length=40, p=1, q=1)
+sampler = gravlearn.RandomWalkSampler(net, walk_length=40, p=1, q=1)
 walks = [sampler.sampling(i) for _ in range(1) for i in range(net.shape[0])]
 
-model = gn.train_ref2vec(
-    seqs=walks,
-    refs_for_seq=net,
-    conv_matrix=net,
-    conv_decay_rate=1.0,
-    conv_steps=5,
-    conv_layer_size=512,
-    window_length=5,
-    dim=64,
-    learn_joint_prob=True,
-    batch_size=256,
-    checkpoint=5000,
-    outputfile="test.pth",
-    weights=None,
-    cuda=True,
-    normalize=True
-    # weights=1/np.array(net.sum(axis = 1)).reshape(-1),
-)
+base_emb = gravlearn.fastRP(net, 256, 10, 1)
+model = gravlearn.GravLearnModel(net.shape[0], dim=32, base_emb = base_emb, normalize=False)
+dist_metric = gravlearn.DistanceMetrics.EUCLIDEAN
+gravlearn.train(model, walks, device = device, bags = net ,window_length=5, dist_metric=dist_metric, batch_size=1024)
+
 
 # %%
 model.eval()
 emb = model.forward(net)
-# %%
-model.radius.weight
 # %%
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 
@@ -105,7 +91,7 @@ sns.set_style("white")
 sns.set(font_scale=1.2)
 sns.set_style("ticks")
 fig, ax = plt.subplots(figsize=(7, 5))
-clf = LinearDiscriminantAnalysis(n_components=2, shrinkage = 0.9, solver = "eigen")
+clf = LinearDiscriminantAnalysis(n_components=2)
 clf = clf.fit(emb, labels)
 xy = clf.transform(emb)
 sns.scatterplot(
