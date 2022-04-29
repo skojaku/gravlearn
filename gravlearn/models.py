@@ -122,9 +122,10 @@ class GravLearnModel(nn.Module):
             torch.from_numpy(A.data).to(torch.float),
         )
         if self.output_layer.weight.is_cuda:
-            indices = indices.cuda()
-            offsets = offsets.cuda()
-            weight = weight.cuda()
+            device = self.output_layer.weight.get_device()
+            indices = indices.cuda(device)
+            offsets = offsets.cuda(device)
+            weight = weight.cuda(device)
 
         x = self.reducer(
             input=indices,

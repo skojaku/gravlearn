@@ -11,15 +11,16 @@ import torch
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.decomposition import PCA
 import gravlearn
+
 # %%
-device = "cuda:0"
+device = "cuda:1"
 
 G = nx.karate_club_graph()
 A = nx.adjacency_matrix(G)
 
 labels = [G.nodes[i]["club"] for i in G.nodes]
 sampler = gravlearn.RandomWalkSampler(A, walk_length=40, p=1, q=1)
-walks = [sampler.sampling(i) for _ in range(10) for i in range(A.shape[0])]
+walks = [sampler.sampling(i) for _ in range(1) for i in range(A.shape[0])]
 base_emb = gravlearn.fastRP(A, 256, 10, 1)
 model = gravlearn.GravLearnModel(A.shape[0], dim=32, base_emb = base_emb, normalize=False)
 dist_metric = gravlearn.DistanceMetrics.COSINE
