@@ -18,11 +18,11 @@ device = "cuda:1"
 G = nx.karate_club_graph()
 A = nx.adjacency_matrix(G)
 
-# %%
-
 labels = [G.nodes[i]["club"] for i in G.nodes]
+A = sparse.csr_matrix(sparse.triu(A))
 sampler = gravlearn.RandomWalkSampler(A, walk_length=40, p=1, q=1)
-walks = [sampler.sampling(i) for _ in range(10) for i in range(A.shape[0])]
+walks = [sampler.sampling(i) for _ in range(20) for i in range(A.shape[0])]
+# %%
 model = gravlearn.Bag2Vec(A.shape[0], dim=32, normalize=False)
 #model = gravlearn.GravLearnModel(A.shape[0], dim=32, base_emb=base_emb, normalize=False)
 dist_metric = gravlearn.DistanceMetrics.COSINE
@@ -82,9 +82,12 @@ net = net[s, :][:, s]
 
 
 # %%
+A = net - net.T
+A.data
+# %%
 sampler = gravlearn.RandomWalkSampler(net, walk_length=40, p=1, q=1)
 walks = [sampler.sampling(i) for _ in range(1) for i in range(net.shape[0])]
-
+# %%
 base_emb = np.random.randn(net.shape[0], 64)
 base_emb = gravlearn.fastRP(net, 64, 10, 1)
 base_emb = np.einsum("ij,i->ij", base_emb, 1 / np.maximum(np.linalg.norm(base_emb, axis=1), 1e-32))
