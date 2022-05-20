@@ -12,19 +12,30 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.decomposition import PCA
 import gravlearn
 
-# %%
 device = "cuda:1"
+# %%
 
 G = nx.karate_club_graph()
 A = nx.adjacency_matrix(G)
 
+# %%
+
 labels = [G.nodes[i]["club"] for i in G.nodes]
 sampler = gravlearn.RandomWalkSampler(A, walk_length=40, p=1, q=1)
-walks = [sampler.sampling(i) for _ in range(1) for i in range(A.shape[0])]
-base_emb = gravlearn.fastRP(A, 256, 10, 1)
-model = gravlearn.GravLearnModel(A.shape[0], dim=32, base_emb = base_emb, normalize=False)
+walks = [sampler.sampling(i) for _ in range(10) for i in range(A.shape[0])]
+model = gravlearn.Bag2Vec(A.shape[0], dim=32, normalize=False)
+#model = gravlearn.GravLearnModel(A.shape[0], dim=32, base_emb=base_emb, normalize=False)
 dist_metric = gravlearn.DistanceMetrics.COSINE
-gravlearn.train(model, walks, device = device, bags =A ,window_length=5, dist_metric=dist_metric, batch_size=1024)
+gravlearn.train(
+    model,
+    walks,
+    device=device,
+    bags=A,
+    window_length=5,
+    dist_metric=dist_metric,
+    batch_size=1024,
+    train_by_triplet=True
+)
 
 emb = model.forward(A)
 
@@ -41,8 +52,6 @@ sns.scatterplot(
 )
 sns.despine()
 clf.score(emb, labels)
-
-
 
 
 # reducer.model.encoder.weight.data.numpy().shape
@@ -76,10 +85,27 @@ net = net[s, :][:, s]
 sampler = gravlearn.RandomWalkSampler(net, walk_length=40, p=1, q=1)
 walks = [sampler.sampling(i) for _ in range(1) for i in range(net.shape[0])]
 
-base_emb = gravlearn.fastRP(net, 256, 10, 1)
-model = gravlearn.GravLearnModel(net.shape[0], dim=32, base_emb = base_emb, normalize=False)
-dist_metric = gravlearn.DistanceMetrics.EUCLIDEAN
-gravlearn.train(model, walks, device = device, bags = net ,window_length=5, dist_metric=dist_metric, batch_size=1024)
+base_emb = np.random.randn(net.shape[0], 64)
+base_emb = gravlearn.fastRP(net, 64, 10, 1)
+base_emb = np.einsum("ij,i->ij", base_emb, 1 / np.maximum(np.linalg.norm(base_emb, axis=1), 1e-32))
+
+weights = np.log(net.shape[0] / (np.array(net.sum(axis = 0)).ravel() + 1))
+model = gravlearn.Bag2Vec(net.shape[0], dim=32, normalize=False)
+#model = gravlearn.GravLearnModel(net.shape[0], dim=32, base_emb=base_emb, weights = weights)
+#model = gravlearn.GravLearnModel(net.shape[0], dim=32, base_emb=base_emb, weights = weights)
+dist_metric = gravlearn.DistanceMetrics.ANGULAR
+gravlearn.train(
+    model,
+    walks,
+    device=device,
+    bags=net,
+    window_length=5,
+    dist_metric=dist_metric,
+    batch_size=1024,
+    share_center=True,
+    epochs = 3,
+    train_by_triplet=True
+)
 
 
 # %%
@@ -105,12 +131,16 @@ sns.scatterplot(
 )
 sns.despine()
 clf.score(emb, labels)
+
 # %%
-np.linalg.norm(emb, axis = 1)
+model.scale
+# %%
+np.linalg.norm(emb, axis=1)
 # %% 3D plot
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
-reducer = dim_reducer.SphericalPCA(lam = 3, mu = 0)
+
+reducer = dim_reducer.SphericalPCA(lam=3, mu=0)
 xyz = reducer.fit_transform(emb, dim=3)
 
 # creating figure
@@ -125,13 +155,13 @@ plot_geeks = ax.scatter(
     xyz[:, 1],
     xyz[:, 2],
     color=[cmap[i] for i in np.unique(labels, return_inverse=True)[1]],
-    s =np.array(net.sum(axis=1)).reshape(-1) / 10,
+    s=np.array(net.sum(axis=1)).reshape(-1) / 10,
 )
 plt.show()
 
 # %% 2D plot
 
-reducer = dim_reducer.SphericalPCA(lam = 3, mu = 0)
+reducer = dim_reducer.SphericalPCA(lam=3, mu=0)
 xy = reducer.fit_transform(emb, dim=2)
 
 sns.set_style("white")

@@ -11,6 +11,7 @@ class QuadletSampler(Dataset):
         window_length,
         epochs=1,
         buffer_size=100000,
+        share_center=False,
     ):
         self.window_length = window_length
         # Counter and Memory
@@ -23,6 +24,7 @@ class QuadletSampler(Dataset):
         self.random_contexts = None
         self.seqs = seqs
         self.epochs = epochs
+        self.share_center = share_center
 
         # Count sequence elements
         counter = Counter()
@@ -36,7 +38,6 @@ class QuadletSampler(Dataset):
         for k, v in counter.items():
             self.ele_null_prob[k] = v
         self.ele_null_prob /= np.sum(self.ele_null_prob)
-
         self.n_seqs = len(seqs)
         self.seq_order = np.random.choice(self.n_seqs, self.n_seqs, replace=False)
         self.seq_iter = 0
@@ -77,9 +78,17 @@ class QuadletSampler(Dataset):
             np.concatenate(self.centers),
             np.concatenate(self.contexts),
         )
-        self.random_center = np.random.choice(
-            self.n_elements, size=len(self.centers), p=self.ele_null_prob, replace=True
-        )
+
+        if self.share_center:
+            self.random_center = self.centers.copy()
+        else:
+            self.random_center = np.random.choice(
+                self.n_elements,
+                size=len(self.centers),
+                p=self.ele_null_prob,
+                replace=True,
+            )
+
         self.random_contexts = np.random.choice(
             self.n_elements, size=len(self.centers), p=self.ele_null_prob, replace=True
         )

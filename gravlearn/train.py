@@ -1,11 +1,11 @@
 import torch
 from scipy import sparse
-from torch.optim import Adam
+from torch.optim import Adam, AdamW
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from .data_sampler import QuadletSampler
-from .losses import QuadletLoss
+from .losses import QuadletLoss, TripletLoss
 from .metrics import DistanceMetrics
 
 
@@ -21,6 +21,8 @@ def train(
     epochs=1,
     checkpoint=10000,
     outputfile=None,
+    share_center=False,
+    train_by_triplet=False,
 ):
     # Set the device parameter if not specified
     if device is None:
@@ -40,6 +42,7 @@ def train(
         window_length=window_length,
         buffer_size=data_buffer_size,
         epochs=epochs,
+        share_center=share_center,
     )
 
     dataloader = DataLoader(
@@ -59,14 +62,23 @@ def train(
     #
     # Set up the loss function
     #
-    loss_func = QuadletLoss(embedding=model, dist_metric=dist_metric)
+    if train_by_triplet:
+        loss_func = TripletLoss(embedding=model, dist_metric=dist_metric)
+    else:
+        loss_func = QuadletLoss(embedding=model, dist_metric=dist_metric)
 
     # Training
     focal_params = filter(lambda p: p.requires_grad, model.parameters())
-    optim = Adam(focal_params, lr=0.003)
+    # optim = Adam(focal_params, lr=0.003)
+    optim = AdamW(focal_params)
 
     pbar = tqdm(enumerate(dataloader), miniters=100, total=len(dataloader))
     for it, (p1, p2, n1, n2) in pbar:
+
+        # clear out the gradient
+        focal_params = filter(lambda p: p.requires_grad, model.parameters())
+        for param in focal_params:
+            param.grad = None
 
         # Convert to bags if bags are given
         if bags is not None:
@@ -74,17 +86,15 @@ def train(
         else:
             p1, p2, n1, n2 = p1.to(device), p2.to(device), n1.to(device), n2.to(device)
 
-        # clear out the gradient
-        focal_params = filter(lambda p: p.requires_grad, model.parameters())
-        for param in focal_params:
-            param.grad = None
-
         # compute the loss
-        loss = loss_func(p1, p2, n1, n2)
+        if train_by_triplet:
+            loss = loss_func(p1, p2, n2)
+        else:
+            loss = loss_func(p1, p2, n1, n2)
 
         # backpropagate
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(focal_params, 1)
+        # torch.nn.utils.clip_grad_norm_(focal_params, 1)
 
         # update the parameters
         optim.step()
