@@ -12,6 +12,7 @@ class QuadletSampler(Dataset):
         epochs=1,
         buffer_size=100000,
         share_center=False,
+        context_window_type="double",
     ):
         self.window_length = window_length
         # Counter and Memory
@@ -25,13 +26,16 @@ class QuadletSampler(Dataset):
         self.seqs = seqs
         self.epochs = epochs
         self.share_center = share_center
+        self.context_window_type = context_window_type
 
         # Count sequence elements
         counter = Counter()
         self.n_samples = 0
         for seq in seqs:
             counter.update(seq)
-            n_pairs = count_center_context_pairs(window_length, len(seq))
+            n_pairs = count_center_context_pairs(
+                window_length, len(seq), context_window_type
+            )
             self.n_samples += n_pairs
         self.n_elements = int(max(counter.keys()) + 1)
         self.ele_null_prob = np.zeros(self.n_elements)
@@ -70,7 +74,9 @@ class QuadletSampler(Dataset):
                 self.seq_iter = self.seq_iter % self.n_seqs
             seq_id = self.seq_order[self.seq_iter]
             cent, cont = _get_center_context_pairs(
-                np.array(self.seqs[seq_id]), self.window_length
+                np.array(self.seqs[seq_id]),
+                self.window_length,
+                self.context_window_type,
             )
             self.centers.append(cent)
             self.contexts.append(cont)
@@ -97,7 +103,7 @@ class QuadletSampler(Dataset):
 
 
 @njit(nogil=True)
-def count_center_context_pairs(window_length, seq_len):
+def count_center_context_pairs(window_length, seq_len, context_window_type):
     # Count the number of center-context pairs.
     # Suppose that we sample, for each center word, a context word that proceeds the center k-words.
     # There are T-k words in the sequence, so that the number of pairs is given by summing this over k upto min(T-1, L), i.e.,
@@ -105,11 +111,15 @@ def count_center_context_pairs(window_length, seq_len):
     # where we cap the upper range to T-1 in case that the window covers the entire sentence, and
     # we double the sum because the word window extends over both proceeding and succeeding words.
     min_window_length = np.minimum(window_length, seq_len - 1)
-    return 2 * min_window_length * seq_len - min_window_length * (min_window_length + 1)
+    n = 2 * min_window_length * seq_len - min_window_length * (min_window_length + 1)
+    if context_window_type == "double":
+        return int(n)
+    else:
+        return int(n / 2)
 
 
 @njit(nogil=True)
-def _get_center_context_pairs(seq, window_length):
+def _get_center_context_pairs(seq, window_length, context_window_type):
     """Get center-context pairs from sequence.
 
     :param seq: Sequence
@@ -120,12 +130,18 @@ def _get_center_context_pairs(seq, window_length):
     :rtype: tuple
     """
     n_seq = len(seq)
-    n_pairs = count_center_context_pairs(window_length, n_seq)
-    centers = np.zeros(n_pairs, dtype=np.int64)
-    contexts = np.zeros(n_pairs, dtype=np.int64)
+    n_pairs = count_center_context_pairs(window_length, n_seq, context_window_type)
+    centers = -np.ones(n_pairs, dtype=np.int64)
+    contexts = -np.ones(n_pairs, dtype=np.int64)
     idx = 0
+    wstart, wend = 0, 2 * window_length + 1
+    if context_window_type == "suc":
+        wstart = window_length + 1
+    if context_window_type == "prec":
+        wend = window_length
+
     for i in range(n_seq):
-        for j in range(2 * window_length + 1):
+        for j in range(wstart, wend):
             if (
                 (j != window_length)
                 and (i - window_length + j >= 0)

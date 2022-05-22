@@ -34,7 +34,8 @@ gravlearn.train(
     window_length=5,
     dist_metric=dist_metric,
     batch_size=1024,
-    train_by_triplet=True
+    train_by_triplet=True,
+    context_window_type = "suc"
 )
 
 emb = model.forward(A)
@@ -106,8 +107,9 @@ gravlearn.train(
     dist_metric=dist_metric,
     batch_size=1024,
     share_center=True,
-    epochs = 3,
-    train_by_triplet=True
+    epochs = 6,
+    train_by_triplet=True,
+    context_window_type = "suc"
 )
 
 

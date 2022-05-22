@@ -23,6 +23,7 @@ def train(
     outputfile=None,
     share_center=False,
     train_by_triplet=False,
+    context_window_type="double",
 ):
     # Set the device parameter if not specified
     if device is None:
@@ -43,6 +44,7 @@ def train(
         buffer_size=data_buffer_size,
         epochs=epochs,
         share_center=share_center,
+        context_window_type=context_window_type,
     )
 
     dataloader = DataLoader(
