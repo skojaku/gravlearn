@@ -21,25 +21,28 @@ A = nx.adjacency_matrix(G)
 labels = [G.nodes[i]["club"] for i in G.nodes]
 A = sparse.csr_matrix(sparse.triu(A))
 sampler = gravlearn.RandomWalkSampler(A, walk_length=40, p=1, q=1)
-walks = [sampler.sampling(i) for _ in range(20) for i in range(A.shape[0])]
-# %%
-model = gravlearn.Bag2Vec(A.shape[0], dim=32, normalize=False)
+walks = [sampler.sampling(i) for _ in range(50) for i in range(A.shape[0])]
+base_emb = gravlearn.NormalizedLaplacianEmbedding(A, dim = 6)
+model = gravlearn.Word2Vec(A.shape[0], dim=32, normalize=False)
+#model = gravlearn.PrecompressedWord2Vec(A.shape[0], dim=32, base_emb = base_emb, normalize=False)
 #model = gravlearn.GravLearnModel(A.shape[0], dim=32, base_emb=base_emb, normalize=False)
-dist_metric = gravlearn.DistanceMetrics.COSINE
+dist_metric = gravlearn.DistanceMetrics.DOTSIM
 gravlearn.train(
     model,
     walks,
     device=device,
-    bags=A,
-    window_length=5,
+    window_length=10,
     dist_metric=dist_metric,
     batch_size=1024,
     train_by_triplet=True,
-    context_window_type = "suc"
+    context_window_type = "suc",
+    epochs = 10
 )
 
-emb = model.forward(A)
+# %%
+emb = model.forward(torch.arange(A.shape[0]).to(device))
 
+# %%
 clf = LinearDiscriminantAnalysis(n_components=1)
 clf = clf.fit(emb, labels)
 xy = PCA(n_components=2).fit_transform(emb)
@@ -80,42 +83,46 @@ net = sparse.csr_matrix(
 s = ~pd.isna(node_table["region"])
 labels = node_table[s]["region"].values
 net = net[s, :][:, s]
+net = net + net.T
 
-
-# %%
-A = net - net.T
-A.data
 # %%
 sampler = gravlearn.RandomWalkSampler(net, walk_length=40, p=1, q=1)
-walks = [sampler.sampling(i) for _ in range(1) for i in range(net.shape[0])]
+walks = [sampler.sampling(i) for _ in range(10) for i in range(net.shape[0])]
+base_emb = gravlearn.NormalizedLaplacianEmbedding(net, dim = 64)
 # %%
-base_emb = np.random.randn(net.shape[0], 64)
-base_emb = gravlearn.fastRP(net, 64, 10, 1)
-base_emb = np.einsum("ij,i->ij", base_emb, 1 / np.maximum(np.linalg.norm(base_emb, axis=1), 1e-32))
 
-weights = np.log(net.shape[0] / (np.array(net.sum(axis = 0)).ravel() + 1))
-model = gravlearn.Bag2Vec(net.shape[0], dim=32, normalize=False)
+
+# %%
+#model = gravlearn.Word2Vec(net.shape[0], dim=32, normalize=False)
+model = gravlearn.PrecompressedWord2Vec(net.shape[0], dim=32, base_emb = base_emb, normalize=False)
+#model = gravlearn.Bag2Vec(net.shape[0], dim=32, normalize=False)
 #model = gravlearn.GravLearnModel(net.shape[0], dim=32, base_emb=base_emb, weights = weights)
 #model = gravlearn.GravLearnModel(net.shape[0], dim=32, base_emb=base_emb, weights = weights)
-dist_metric = gravlearn.DistanceMetrics.ANGULAR
+dist_metric = gravlearn.DistanceMetrics.DOTSIM
 gravlearn.train(
     model,
     walks,
     device=device,
-    bags=net,
+    #bags=net,
     window_length=5,
     dist_metric=dist_metric,
     batch_size=1024,
     share_center=True,
-    epochs = 6,
+    epochs = 1,
     train_by_triplet=True,
-    context_window_type = "suc"
+    context_window_type = "double"
 )
 
 
 # %%
 model.eval()
-emb = model.forward(net)
+#emb = model.forward(net)
+emb = model.forward(torch.arange(net.shape[0]).to(device))
+
+# %%
+base_emb = gravlearn.fastRP(net, 64, 10, decay_rate = 1)
+base_emb = np.einsum("ij,i->ij", base_emb, 1 / np.linalg.norm(base_emb, axis=1))
+emb = base_emb.copy()
 # %%
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 

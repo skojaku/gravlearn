@@ -4,11 +4,37 @@ import torch.nn as nn
 import torch.nn.functional as F
 from scipy import sparse
 from torch import FloatTensor
-from .fastRP import fastRP
 from . import utils
 
+from abc import ABC, abstractmethod
 
-class Word2Vec(nn.Module):
+
+class EmbeddingModel(nn.Module):
+    def forward(self, data, layer="center"):
+
+        if layer == "center":
+            x = self.forward_i(data)
+        elif layer == "context":
+            x = self.forward_o(data)
+
+        if self.training is False:
+            if next(self.parameters()).is_cuda:
+                return x.detach().cpu().numpy()
+            else:
+                return x.detach().numpy()
+        else:
+            return x
+
+    @abstractmethod
+    def forward_i(self, data):
+        pass
+
+    @abstractmethod
+    def forward_o(self, data):
+        pass
+
+
+class Word2Vec(EmbeddingModel):
     def __init__(self, vocab_size, dim, normalize=False):
         super(Word2Vec, self).__init__()
         # Layers
@@ -20,27 +46,43 @@ class Word2Vec(nn.Module):
         self.normalize = normalize
         self.training = True
 
-    def forward(self, data):
-        x = self.ivectors(data)
-        if self.training is False:
-            if self.ivectors.weight.is_cuda:
-                return x.detach().cpu().numpy()
-            else:
-                return x.detach().numpy()
-        else:
-            return x
+    def forward_i(self, data):
+        return self.ivectors(data)
 
     def forward_o(self, data):
-        x = self.ovectors(data)
-        if self.training is False:
-            if self.ovectors.weight.is_cuda:
-                return x.detach().cpu().numpy()
-            else:
-                return x.detach().numpy()
-        else:
-            return x
+        return self.ovectors(data)
 
-class Bag2Vec(nn.Module):
+
+class PrecompressedWord2Vec(Word2Vec):
+    def __init__(self, vocab_size, dim, base_emb, normalize=False):
+        super(Word2Vec, self).__init__()
+
+        dim_base = base_emb.shape[1]
+
+        self.base_vectors = torch.nn.Embedding(vocab_size, dim_base, dtype=torch.float)
+        self.base_vectors.weight = nn.Parameter(
+            FloatTensor(base_emb), requires_grad=False
+        )
+
+        # Layers
+        self.ivectors = torch.nn.Linear(dim_base, dim, dtype=torch.float)
+        self.ovectors = torch.nn.Linear(dim_base, dim, dtype=torch.float)
+        self.scale = nn.Parameter(torch.Tensor([1]), requires_grad=False)
+
+        # Parameters
+        self.normalize = normalize
+        self.training = True
+
+    def forward_i(self, data):
+        x = self.base_vectors(data)
+        return self.ivectors(x)
+
+    def forward_o(self, data):
+        x = self.base_vectors(data)
+        return self.ovectors(x)
+
+
+class Bag2Vec(EmbeddingModel):
     def __init__(self, vocab_size, dim, weights=None, normalize=False):
         super(Bag2Vec, self).__init__()
 
@@ -69,28 +111,11 @@ class Bag2Vec(nn.Module):
             weights = np.ones(vocab_size)
         self.weights = weights
 
-    def forward(self, data):
-        return self.forward_i(data)
-
     def forward_i(self, data):
-        x = self._bag2vec(data, return_context_vector=False)
-        if self.training is False:
-            if self.ivectors.weight.is_cuda:
-                return x.detach().cpu().numpy()
-            else:
-                return x.detach().numpy()
-        else:
-            return x
+        return self._bag2vec(data, return_context_vector=False)
 
     def forward_o(self, data):
-        x = self._bag2vec(data, return_context_vector=True)
-        if self.training is False:
-            if self.ovectors.weight.is_cuda:
-                return x.detach().cpu().numpy()
-            else:
-                return x.detach().numpy()
-        else:
-            return x
+        return self._bag2vec(data, return_context_vector=True)
 
     def _bag2vec(self, data, return_context_vector=False):
         A = utils.to_adjacency_matrix(data).astype(float)
@@ -127,39 +152,7 @@ class Bag2Vec(nn.Module):
         return x
 
 
-# class GravLearnModel(nn.Module):
-#    def __init__(self, vocab_size, dim, normalize=False):
-#        super(GravLearnModel, self).__init__()
-#
-#        # Layers
-#        self.reducer = torch.nn.Embedding(vocab_size, dim, dtype=torch.float)
-#        self.relu = nn.LeakyReLU()
-#        self.dropout = nn.Dropout(p=0.2)
-#        self.scale = nn.Parameter(torch.Tensor([1]), requires_grad=True)
-#        self.output_layer = torch.nn.Linear(dim, dim, dtype=torch.float, bias=True)
-#
-#        # Parameters
-#        self.normalize = normalize
-#        self.training = True
-#
-#    def forward(self, data):
-#
-#        x = self.reducer(data)
-#        x = self.dropout(x)
-#        x = self.relu(x)
-#        x = self.output_layer(x)
-#        x = F.normalize(x, p=2, dim=1) if self.normalize else x
-#
-#        if self.training is False:
-#            if self.output_layer.weight.is_cuda:
-#                return x.detach().cpu().numpy()
-#            else:
-#                return x.detach().numpy()
-#        else:
-#            return x
-
-
-class GravLearnModel(nn.Module):
+class GravLearnModel(EmbeddingModel):
     def __init__(
         self,
         vocab_size,
@@ -198,7 +191,7 @@ class GravLearnModel(nn.Module):
         # Initialize Layers
         self.reducer.weight = nn.Parameter(FloatTensor(base_emb), requires_grad=False)
 
-    def forward(self, data):
+    def forward_i(self, data):
 
         x = self._input_to_vec(data)
         # x = F.normalize(x, p=2, dim=1)  # to prevent the centering
@@ -216,11 +209,8 @@ class GravLearnModel(nn.Module):
         else:
             return x
 
-    def forward_i(self, data):
-        return self.forward(data)
-
     def forward_o(self, data):
-        return self.forward(data)
+        return self.forward_i(data)
 
     def _input_to_vec(self, data):
         A = utils.to_adjacency_matrix(data).astype(float)
