@@ -1,11 +1,10 @@
 import torch
-from scipy import sparse
-from torch.optim import Adam, AdamW
+from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from .data_sampler import QuadletSampler
-from .losses import QuadletLoss, TripletLoss
+from .data_sampler import TripletDataset, nGramSampler, FrequencyBasedSampler
+from .losses import TripletLoss
 from .metrics import DistanceMetrics
 
 
@@ -17,13 +16,11 @@ def train(
     bags=None,
     batch_size=256,
     device=None,
-    data_buffer_size=100000,
     epochs=1,
     checkpoint=10000,
     outputfile=None,
-    share_center=False,
-    train_by_triplet=False,
     context_window_type="double",
+    **params
 ):
     # Set the device parameter if not specified
     if device is None:
@@ -36,19 +33,20 @@ def train(
         model.scale.requires_grad = False
 
     #
-    # Set up data sampler
+    # Set up dataset
     #
-    sampler = QuadletSampler(
-        seqs=seqs,
-        window_length=window_length,
-        buffer_size=data_buffer_size,
-        epochs=epochs,
-        share_center=share_center,
-        context_window_type=context_window_type,
+    pos_sampler = nGramSampler(
+        window_length=window_length, context_window_type=context_window_type
+    )
+    neg_sampler = FrequencyBasedSampler(gamma=1)
+    pos_sampler.fit(seqs)
+    neg_sampler.fit(seqs)
+    dataset = TripletDataset(
+        epochs=epochs, pos_sampler=pos_sampler, neg_sampler=neg_sampler
     )
 
     dataloader = DataLoader(
-        sampler,
+        dataset,
         batch_size=batch_size,
         shuffle=False,
         num_workers=1,
@@ -64,18 +62,14 @@ def train(
     #
     # Set up the loss function
     #
-    if train_by_triplet:
-        loss_func = TripletLoss(embedding=model, dist_metric=dist_metric)
-    else:
-        loss_func = QuadletLoss(embedding=model, dist_metric=dist_metric)
+    loss_func = TripletLoss(embedding=model, dist_metric=dist_metric)
 
     # Training
     focal_params = filter(lambda p: p.requires_grad, model.parameters())
-    # optim = Adam(focal_params, lr=0.003)
     optim = AdamW(focal_params)
 
     pbar = tqdm(enumerate(dataloader), miniters=100, total=len(dataloader))
-    for it, (p1, p2, n1, n2) in pbar:
+    for it, (p1, p2, n1) in pbar:
 
         # clear out the gradient
         focal_params = filter(lambda p: p.requires_grad, model.parameters())
@@ -84,19 +78,16 @@ def train(
 
         # Convert to bags if bags are given
         if bags is not None:
-            p1, p2, n1, n2 = bags[p1], bags[p2], bags[n1], bags[n2]
+            p1, p2, n1 = bags[p1], bags[p2], bags[n1]
         else:
-            p1, p2, n1, n2 = p1.to(device), p2.to(device), n1.to(device), n2.to(device)
+            p1, p2, n1 = p1.to(device), p2.to(device), n1.to(device)
 
         # compute the loss
-        if train_by_triplet:
-            loss = loss_func(p1, p2, n2)
-        else:
-            loss = loss_func(p1, p2, n1, n2)
+        loss = loss_func(p1, p2, n1)
 
         # backpropagate
         loss.backward()
-        # torch.nn.utils.clip_grad_norm_(focal_params, 1)
+        torch.nn.utils.clip_grad_norm_(focal_params, 1)
 
         # update the parameters
         optim.step()

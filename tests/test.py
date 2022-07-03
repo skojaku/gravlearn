@@ -15,21 +15,31 @@ class TestGravLearn(unittest.TestCase):
         self.seqs = [
             sampler.sampling(i) for _ in range(10) for i in range(self.A.shape[0])
         ]
-    def test_precompressed_word2vec(self):
-        device = "cpu"
-        dim, base_dim = 32, 16
-        base_emb = gravlearn.NormalizedLaplacianEmbedding(self.A, base_dim)
-        model = gravlearn.PrecompressedWord2Vec(self.A.shape[0], dim, base_emb)
-        dist_metric = gravlearn.DistanceMetrics.COSINE
-        model = gravlearn.train(
-            model,
-            self.seqs,
-            window_length=5,
-            dist_metric=dist_metric,
-            device=device,
-        )
-        emb = model.forward(np.arange(self.A.shape[0]))
+    
+    def test_word2vec_sampler(self):
+        in_vec = np.random.randn(self.A.shape[0], 10)
+        out_vec = np.random.randn(self.A.shape[0], 10)
+        sampler = gravlearn.Word2VecSampler(in_vec, out_vec, alpha=1)
+        sampler.fit(self.seqs)
+        sampler.sampling()
+        sampler.conditional_sampling(1)
 
+
+#    def test_precompressed_word2vec(self):
+#        device = "cpu"
+#        dim, base_dim = 32, 16
+#        base_emb = gravlearn.NormalizedLaplacianEmbedding(self.A, base_dim)
+#        model = gravlearn.PrecompressedWord2Vec(self.A.shape[0], dim, base_emb)
+#        dist_metric = gravlearn.DistanceMetrics.COSINE
+#        model = gravlearn.train(
+#            model,
+#            self.seqs,
+#            window_length=5,
+#            dist_metric=dist_metric,
+#            device=device,
+#        )
+#        emb = model.forward(torch.tensor(np.arange(self.A.shape[0])))
+#
 #    def test_grav_learn(self):
 #        device = "cpu"
 #        dim, base_dim = 32, 256

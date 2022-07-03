@@ -3,72 +3,70 @@ import numpy as np
 from numba import njit
 from torch.utils.data import Dataset
 
+from abc import ABC, abstractmethod
 
-class QuadletSampler(Dataset):
+
+class DataSampler(ABC):
+    @abstractmethod
+    def fit(self, seqs):
+        pass
+
+    @abstractmethod
+    def sampling(self):
+        pass
+
+    @abstractmethod
+    def conditional_sampling(self, conditioned_on):
+        pass
+
+
+class nGramSampler(DataSampler):
     def __init__(
-        self,
-        seqs,
-        window_length,
-        epochs=1,
-        buffer_size=100000,
-        share_center=False,
-        context_window_type="double",
+        self, window_length=10, context_window_type="double", buffer_size=1000
     ):
         self.window_length = window_length
-        # Counter and Memory
-        self.n_sampled = 0
-        self.sample_id = 0
-        self.scanned_node_id = 0
         self.buffer_size = buffer_size
-        self.contexts = None
-        self.centers = None
-        self.random_contexts = None
-        self.seqs = seqs
-        self.epochs = epochs
-        self.share_center = share_center
         self.context_window_type = context_window_type
+        self.n_seqs = 0
+        self.n_samples = 0
+        self.seq_order = None
+        self.seq_iter = 0
+        self.centers = np.array([])
+        self.contexts = np.array([])
 
-        # Count sequence elements
-        counter = Counter()
+    def fit(self, seqs):
+        self.seqs = seqs
+
         self.n_samples = 0
         for seq in seqs:
-            counter.update(seq)
             n_pairs = count_center_context_pairs(
-                window_length, len(seq), context_window_type
+                self.window_length, len(seq), self.context_window_type
             )
             self.n_samples += n_pairs
-        self.n_elements = int(max(counter.keys()) + 1)
-        self.ele_null_prob = np.zeros(self.n_elements)
-        for k, v in counter.items():
-            self.ele_null_prob[k] = v
-        self.ele_null_prob /= np.sum(self.ele_null_prob)
         self.n_seqs = len(seqs)
         self.seq_order = np.random.choice(self.n_seqs, self.n_seqs, replace=False)
         self.seq_iter = 0
 
-        # Initialize
-        self._generate_samples()
-
     def __len__(self):
-        return self.n_samples * self.epochs
+        return self.n_samples
 
-    def __getitem__(self, idx):
-        if self.sample_id == self.n_sampled:
+    def sampling(self):
+
+        while len(self.centers) <= 2:
             self._generate_samples()
 
-        center = self.centers[self.sample_id]
-        cont = self.contexts[self.sample_id].astype(np.int64)
-        rand_center = self.random_center[self.sample_id].astype(np.int64)
-        rand_cont = self.random_contexts[self.sample_id].astype(np.int64)
+        cent, self.centers = np.split(self.centers, [1])
+        cont, self.contexts = np.split(self.contexts, [1])
 
-        self.sample_id += 1
+        return cent[0], cont[0]
 
-        return center, cont, rand_center, rand_cont
+    def conditional_sampling(self, conditioned_on=None):
+        return -1
 
     def _generate_samples(self):
-        self.centers = []
-        self.contexts = []
-        for i in range(self.buffer_size):
+        self.centers = [self.centers]
+        self.contexts = [self.contexts]
+        for _ in range(self.buffer_size):
             self.seq_iter += 1
             if self.seq_iter >= self.n_seqs:
                 self.seq_iter = self.seq_iter % self.n_seqs
@@ -80,26 +78,92 @@ class QuadletSampler(Dataset):
             )
             self.centers.append(cent)
             self.contexts.append(cont)
+
         self.centers, self.contexts = (
-            np.concatenate(self.centers),
-            np.concatenate(self.contexts),
+            np.concatenate(self.centers).astype(int),
+            np.concatenate(self.contexts).astype(int),
         )
-
-        if self.share_center:
-            self.random_center = self.centers.copy()
-        else:
-            self.random_center = np.random.choice(
-                self.n_elements,
-                size=len(self.centers),
-                p=self.ele_null_prob,
-                replace=True,
-            )
-
-        self.random_contexts = np.random.choice(
-            self.n_elements, size=len(self.centers), p=self.ele_null_prob, replace=True
+        order = np.random.choice(
+            len(self.centers), size=len(self.centers), replace=False
         )
-        self.n_sampled = len(self.centers)
-        self.sample_id = 0
+        self.centers, self.contexts = self.centers[order], self.contexts[order]
+
+
+class FrequencyBasedSampler(DataSampler):
+    def __init__(self, gamma=1):
+        self.gamma = gamma
+        self.n_elements = 0
+        self.ele_null_prob = None
+
+    def fit(self, seqs):
+        counter = Counter()
+        for seq in seqs:
+            counter.update(seq)
+        self.n_elements = int(max(counter.keys()) + 1)
+        self.ele_null_prob = np.zeros(self.n_elements)
+        for k, v in counter.items():
+            self.ele_null_prob[k] = v
+        self.ele_null_prob /= np.sum(self.ele_null_prob)
+
+    def conditional_sampling(self, conditioned_on=None):
+        return self.sampling()[0]
+
+    def sampling(self):
+        cent = np.random.choice(
+            self.n_elements, size=1, p=self.ele_null_prob, replace=True
+        )
+        cont = np.random.choice(
+            self.n_elements, size=1, p=self.ele_null_prob, replace=True
+        )
+        return cent[0], cont[0]
+
+
+class Word2VecSampler(DataSampler):
+    def __init__(self, in_vec, out_vec, alpha=1):
+        self.alpha = alpha
+        self.in_vec = in_vec
+        self.out_vec = out_vec
+        self.center_sampler = FrequencyBasedSampler()
+        self.n_elements = out_vec.shape[0]
+
+    def fit(self, seqs):
+        self.center_sampler.fit(seqs)
+
+    def conditional_sampling(self, conditioned_on=None):
+        uv = self.in_vec[conditioned_on, :] @ self.out_vec.T
+        uv = np.array(uv - np.mean(uv)).ravel()
+        p = np.exp(self.alpha * uv)
+        p /= np.sum(p)
+        return np.random.choice(self.n_elements, size=1, p=p, replace=True)
+
+    def sampling(self):
+        cent = self.center_sampler.sampling()[0]
+        cont = self.conditional_sampling(cent)
+        return cent, cont
+
+
+#
+# Triplet Dataset
+#
+class TripletDataset(Dataset):
+    def __init__(
+        self,
+        pos_sampler,
+        neg_sampler,
+        epochs=1,
+    ):
+        self.epochs = epochs
+        self.pos_sampler = pos_sampler
+        self.neg_sampler = neg_sampler
+        self.n_samples = len(self.pos_sampler)
+
+    def __len__(self):
+        return self.n_samples * self.epochs
+
+    def __getitem__(self, idx):
+        center, cont = self.pos_sampler.sampling()
+        rand_cont = self.neg_sampler.conditional_sampling(conditioned_on=center)
+        return center, cont, rand_cont
 
 
 @njit(nogil=True)
