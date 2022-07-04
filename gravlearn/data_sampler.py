@@ -51,7 +51,6 @@ class nGramSampler(DataSampler):
         return self.n_samples
 
     def sampling(self):
-
         while len(self.centers) <= 2:
             self._generate_samples()
 
@@ -134,7 +133,7 @@ class Word2VecSampler(DataSampler):
         uv = np.array(uv - np.mean(uv)).ravel()
         p = np.exp(self.alpha * uv)
         p /= np.sum(p)
-        return np.random.choice(self.n_elements, size=1, p=p, replace=True)
+        return np.random.choice(self.n_elements, size=1, p=p, replace=True)[0]
 
     def sampling(self):
         cent = self.center_sampler.sampling()[0]
