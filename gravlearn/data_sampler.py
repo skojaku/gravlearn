@@ -31,6 +31,7 @@ class nGramSampler(DataSampler):
         self.n_samples = 0
         self.seq_order = None
         self.seq_iter = 0
+        self.buffer_idx = 0
         self.centers = np.array([])
         self.contexts = np.array([])
 
@@ -46,25 +47,27 @@ class nGramSampler(DataSampler):
         self.n_seqs = len(seqs)
         self.seq_order = np.random.choice(self.n_seqs, self.n_seqs, replace=False)
         self.seq_iter = 0
+        self.buffer_idx = 0
 
     def __len__(self):
         return self.n_samples
 
     def sampling(self):
-        while len(self.centers) <= 2:
+
+        if self.buffer_idx >=len(self.centers):
             self._generate_samples()
+        
+        cent = self.centers[self.buffer_idx]
+        cont = self.contexts[self.buffer_idx]
 
-        cent, self.centers = np.split(self.centers, [1])
-        cont, self.contexts = np.split(self.contexts, [1])
-
-        return cent[0], cont[0]
+        return cent, cont
 
     def conditional_sampling(self, conditioned_on=None):
         return -1
 
     def _generate_samples(self):
-        self.centers = [self.centers]
-        self.contexts = [self.contexts]
+        self.centers = []
+        self.contexts = []
         for _ in range(self.buffer_size):
             self.seq_iter += 1
             if self.seq_iter >= self.n_seqs:
@@ -86,6 +89,7 @@ class nGramSampler(DataSampler):
             len(self.centers), size=len(self.centers), replace=False
         )
         self.centers, self.contexts = self.centers[order], self.contexts[order]
+        self.buffer_idx = 0
 
 
 class FrequencyBasedSampler(DataSampler):
@@ -139,6 +143,8 @@ class Word2VecSampler(DataSampler):
         cent = self.center_sampler.sampling()[0]
         cont = self.conditional_sampling(cent)
         return cent, cont
+
+
 
 
 #
