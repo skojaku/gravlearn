@@ -54,7 +54,6 @@ class TestGravLearn(unittest.TestCase):
             dist_metric=dist_metric,
             device=device,
         )
-        emb = model.forward(self.A)
 
 
 if __name__ == "__main__":
