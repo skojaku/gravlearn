@@ -33,7 +33,7 @@ gravlearn.train(
     device=device,
     window_length=10,
     dist_metric=dist_metric,
-    batch_size=1024,
+    batch_size=128,
     train_by_triplet=True,
     context_window_type = "suc",
     epochs = 10
@@ -87,14 +87,14 @@ net = net + net.T
 
 # %%
 sampler = gravlearn.RandomWalkSampler(net, walk_length=40, p=1, q=1)
-walks = [sampler.sampling(i) for _ in range(10) for i in range(net.shape[0])]
+walks = [sampler.sampling(i) for _ in range(1) for i in range(net.shape[0])]
 base_emb = gravlearn.NormalizedLaplacianEmbedding(net, dim = 64)
 # %%
 
 
 # %%
-#model = gravlearn.Word2Vec(net.shape[0], dim=32, normalize=False)
-model = gravlearn.PrecompressedWord2Vec(net.shape[0], dim=32, base_emb = base_emb, normalize=False)
+model = gravlearn.Word2Vec(net.shape[0], dim=32, normalize=False)
+#model = gravlearn.PrecompressedWord2Vec(net.shape[0], dim=32, base_emb = base_emb, normalize=False)
 #model = gravlearn.Bag2Vec(net.shape[0], dim=32, normalize=False)
 #model = gravlearn.GravLearnModel(net.shape[0], dim=32, base_emb=base_emb, weights = weights)
 #model = gravlearn.GravLearnModel(net.shape[0], dim=32, base_emb=base_emb, weights = weights)

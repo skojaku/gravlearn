@@ -54,11 +54,12 @@ class nGramSampler(DataSampler):
 
     def sampling(self):
 
-        if self.buffer_idx >=len(self.centers):
+        if self.buffer_idx >= len(self.centers):
             self._generate_samples()
-        
+
         cent = self.centers[self.buffer_idx]
         cont = self.contexts[self.buffer_idx]
+        self.buffer_idx += 1
 
         return cent, cont
 
@@ -143,8 +144,6 @@ class Word2VecSampler(DataSampler):
         cent = self.center_sampler.sampling()[0]
         cont = self.conditional_sampling(cent)
         return cent, cont
-
-
 
 
 #

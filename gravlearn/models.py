@@ -40,6 +40,25 @@ class Word2Vec(EmbeddingModel):
         # Layers
         self.ivectors = torch.nn.Embedding(vocab_size, dim, dtype=torch.float)
         self.ovectors = torch.nn.Embedding(vocab_size, dim, dtype=torch.float)
+        self.ivectors.weight = nn.Parameter(
+            torch.cat(
+                [
+                    torch.zeros(1, dim),
+                    FloatTensor(vocab_size, dim).uniform_(-0.5 / dim, 0.5 / dim),
+                ]
+            ),
+            requires_grad=True,
+        )
+        self.ovectors.weight = nn.Parameter(
+            torch.cat(
+                [
+                    torch.zeros(1, dim),
+                    FloatTensor(vocab_size, dim).uniform_(-0.5 / dim, 0.5 / dim),
+                ]
+            ),
+            requires_grad=True,
+        )
+
         self.scale = nn.Parameter(torch.Tensor([1]), requires_grad=False)
 
         # Parameters
