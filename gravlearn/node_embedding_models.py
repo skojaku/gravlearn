@@ -1,5 +1,6 @@
 from scipy import sparse
 import numpy as np
+from sklearn.decomposition import TruncatedSVD
 
 
 def fastRP(A, dim, steps, decay_rate):
@@ -28,3 +29,16 @@ def fastRP(A, dim, steps, decay_rate):
             S = decay_rate * normalized_conv_matrix @ S
         S *= 1 - decay_rate
     return S
+
+
+def NormalizedLaplacianEmbedding(A, dim):
+    # calculate the normalized laplacian
+    indeg = np.array(A.sum(axis=0)).reshape(-1)
+    outdeg = np.array(A.sum(axis=1)).reshape(-1)
+
+    indeg_inv = np.sqrt(1 / np.maximum(1, indeg))
+    outdeg_inv = np.sqrt(1 / np.maximum(1, outdeg))
+
+    L = sparse.diags(outdeg_inv) @ A @ sparse.diags(indeg_inv)
+    svd = TruncatedSVD(n_components=dim, n_iter=7, random_state=42)
+    return svd.fit_transform(L)

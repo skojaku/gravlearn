@@ -1,4 +1,3 @@
-from more_itertools import sample
 from . import utils
 import numpy as np
 from scipy import spatial

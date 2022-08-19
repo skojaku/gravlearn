@@ -35,9 +35,9 @@ class TripletLoss(nn.Module):
         self.logsigmoid = nn.LogSigmoid()
 
     def forward(self, iword, oword, onword):
-        ivectors = self.embedding.forward_i(iword)
-        ovectors = self.embedding.forward_o(oword)
-        onvectors = self.embedding.forward_o(onword)
+        ivectors = self.embedding.forward(iword, layer="center")
+        ovectors = self.embedding.forward(oword, layer="context")
+        onvectors = self.embedding.forward(onword, layer="context")
 
         oloss = self.logsigmoid(
             -self.embedding.scale * self.dist_func(ivectors, ovectors)
